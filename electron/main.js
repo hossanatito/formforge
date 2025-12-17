@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const url = require('url');
 
 let store = null;
 let mainWindow = null;
@@ -17,6 +18,7 @@ function createWindow() {
         height: 900,
         minWidth: 1200,
         minHeight: 700,
+        icon: path.join(__dirname, '../public/icons/icon.ico'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -33,7 +35,8 @@ function createWindow() {
         mainWindow.loadURL('http://localhost:3000');
         mainWindow.webContents.openDevTools();
     } else {
-        mainWindow.loadFile(path.join(__dirname, '../out/index.html'));
+        // Use custom protocol for production
+        mainWindow.loadURL('app://./index.html');
     }
 
     mainWindow.on('closed', () => {
@@ -41,7 +44,18 @@ function createWindow() {
     });
 }
 
+// Register custom protocol for serving static files
+function registerProtocol() {
+    protocol.registerFileProtocol('app', (request, callback) => {
+        const urlPath = request.url.replace('app://.', '');
+        const decodedPath = decodeURIComponent(urlPath);
+        const filePath = path.join(__dirname, '../out', decodedPath);
+        callback({ path: filePath });
+    });
+}
+
 app.whenReady().then(async () => {
+    registerProtocol();
     await initStore();
     createWindow();
 });
