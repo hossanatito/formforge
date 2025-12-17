@@ -47,9 +47,29 @@ function createWindow() {
 // Register custom protocol for serving static files
 function registerProtocol() {
     protocol.registerFileProtocol('app', (request, callback) => {
-        const urlPath = request.url.replace('app://.', '');
-        const decodedPath = decodeURIComponent(urlPath);
-        const filePath = path.join(__dirname, '../out', decodedPath);
+        let urlPath = request.url.replace('app://.', '');
+        urlPath = decodeURIComponent(urlPath);
+
+        // Remove query string and hash
+        urlPath = urlPath.split('?')[0].split('#')[0];
+
+        let filePath = path.join(__dirname, '../out', urlPath);
+
+        // If path doesn't have extension, try to find HTML file
+        if (!path.extname(filePath)) {
+            // Check for directory with index.html
+            const indexPath = path.join(filePath, 'index.html');
+            if (fs.existsSync(indexPath)) {
+                filePath = indexPath;
+            } else {
+                // Try adding .html extension
+                const htmlPath = filePath + '.html';
+                if (fs.existsSync(htmlPath)) {
+                    filePath = htmlPath;
+                }
+            }
+        }
+
         callback({ path: filePath });
     });
 }
