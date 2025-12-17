@@ -1,15 +1,28 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const url = require('url');
 
 let store = null;
 let mainWindow = null;
+let storeReady = false;
 
 // Dynamic import for ESM-only electron-store
 async function initStore() {
-    const Store = (await import('electron-store')).default;
-    store = new Store();
+    try {
+        const Store = (await import('electron-store')).default;
+        store = new Store();
+        storeReady = true;
+        console.log('Store initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize store:', error);
+        // Fallback: use in-memory storage
+        store = {
+            data: { forms: [] },
+            get: function (key, def) { return this.data[key] || def; },
+            set: function (key, val) { this.data[key] = val; }
+        };
+        storeReady = true;
+    }
 }
 
 function createWindow() {
@@ -92,53 +105,99 @@ app.on('activate', () => {
     }
 });
 
+// Helper to ensure store is ready
+function getStore() {
+    if (!store) {
+        return {
+            get: (key, def) => def,
+            set: () => { }
+        };
+    }
+    return store;
+}
+
 // IPC Handlers for form operations
 ipcMain.handle('form:create', async (event, config) => {
-    const forms = store.get('forms', []);
-    forms.push(config);
-    store.set('forms', forms);
-    return config;
+    try {
+        const s = getStore();
+        const forms = s.get('forms', []);
+        forms.push(config);
+        s.set('forms', forms);
+        return config;
+    } catch (error) {
+        console.error('Error creating form:', error);
+        return null;
+    }
 });
 
 ipcMain.handle('form:getAll', async () => {
-    return store.get('forms', []);
+    try {
+        const s = getStore();
+        return s.get('forms', []);
+    } catch (error) {
+        console.error('Error getting forms:', error);
+        return [];
+    }
 });
 
 ipcMain.handle('form:get', async (event, id) => {
-    const forms = store.get('forms', []);
-    return forms.find(f => f.id === id);
+    try {
+        const s = getStore();
+        const forms = s.get('forms', []);
+        return forms.find(f => f.id === id);
+    } catch (error) {
+        console.error('Error getting form:', error);
+        return null;
+    }
 });
 
 ipcMain.handle('form:update', async (event, id, config) => {
-    const forms = store.get('forms', []);
-    const index = forms.findIndex(f => f.id === id);
-    if (index !== -1) {
-        forms[index] = { ...forms[index], ...config };
-        store.set('forms', forms);
-        return forms[index];
+    try {
+        const s = getStore();
+        const forms = s.get('forms', []);
+        const index = forms.findIndex(f => f.id === id);
+        if (index !== -1) {
+            forms[index] = { ...forms[index], ...config };
+            s.set('forms', forms);
+            return forms[index];
+        }
+        return null;
+    } catch (error) {
+        console.error('Error updating form:', error);
+        return null;
     }
-    return null;
 });
 
 ipcMain.handle('form:delete', async (event, id) => {
-    const forms = store.get('forms', []);
-    const filtered = forms.filter(f => f.id !== id);
-    store.set('forms', filtered);
-    return true;
+    try {
+        const s = getStore();
+        const forms = s.get('forms', []);
+        const filtered = forms.filter(f => f.id !== id);
+        s.set('forms', filtered);
+        return true;
+    } catch (error) {
+        console.error('Error deleting form:', error);
+        return false;
+    }
 });
 
 ipcMain.handle('form:export', async (event, id, phpContent) => {
-    const result = await dialog.showSaveDialog(mainWindow, {
-        title: 'Export PHP Form',
-        defaultPath: 'form.php',
-        filters: [{ name: 'PHP Files', extensions: ['php'] }]
-    });
+    try {
+        const result = await dialog.showSaveDialog(mainWindow, {
+            title: 'Export PHP Form',
+            defaultPath: 'form.php',
+            filters: [{ name: 'PHP Files', extensions: ['php'] }]
+        });
 
-    if (!result.canceled && result.filePath) {
-        fs.writeFileSync(result.filePath, phpContent, 'utf-8');
-        return { success: true, path: result.filePath };
+        if (!result.canceled && result.filePath) {
+            fs.writeFileSync(result.filePath, phpContent, 'utf-8');
+            return { success: true, path: result.filePath };
+        }
+        return { success: false };
+    } catch (error) {
+        console.error('Error exporting form:', error);
+        return { success: false };
     }
-    return { success: false };
 });
 
 // Window control handlers

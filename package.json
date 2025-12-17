@@ -2,6 +2,7 @@
   "name": "formforge",
   "version": "1.0.0",
   "description": "FormForge - PHP Form Generator for JVZoo and WarriorPlus",
+  "author": "Hossana Tito",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"next dev --turbopack\" \"wait-on http://localhost:3000 && electron .\"",
